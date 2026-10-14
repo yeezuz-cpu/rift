@@ -1,0 +1,5 @@
+ink      #141413
+graphite #232321
+bone     #EDE9E0
+stone    #8C887D
+ember    #E8553A
