@@ -3,6 +3,7 @@ use std::time::{Duration, Instant};
 use windows_capture::capture::{Context, GraphicsCaptureApiHandler};
 use windows_capture::encoder::{
     AudioSettingsBuilder, ContainerSettingsBuilder, VideoEncoder, VideoSettingsBuilder,
+    VideoSettingsSubType,
 };
 use windows_capture::frame::Frame;
 use windows_capture::graphics_capture_api::InternalCaptureControl;
@@ -35,7 +36,9 @@ impl GraphicsCaptureApiHandler for Recorder {
     fn new(ctx: Context<Self::Flags>) -> Result<Self, Self::Error> {
         let (w, h, opts) = ctx.flags;
         let enc = VideoEncoder::new(
-            VideoSettingsBuilder::new(w, h).frame_rate(opts.fps),
+            VideoSettingsBuilder::new(w, h)
+                .sub_type(VideoSettingsSubType::H264)
+                .frame_rate(opts.fps),
             AudioSettingsBuilder::default().disabled(true),
             ContainerSettingsBuilder::default(),
             &opts.path,
