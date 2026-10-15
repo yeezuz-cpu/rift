@@ -28,8 +28,20 @@ fn main() -> ExitCode {
                 fps: 60,
             })
         }
+        Some("clip") => {
+            let out = args.get(1).cloned().unwrap_or("clip.mp4".into());
+            let dir = std::env::temp_dir().join("rift-buf");
+            let mut files: Vec<_> = std::fs::read_dir(&dir)
+                .map(|d| d.flatten().map(|e| e.path()).collect())
+                .unwrap_or_default();
+            files.sort();
+            rift_core::clip::join(&files, out.as_ref()).map(|lens| {
+                let total: f64 = lens.iter().sum();
+                println!("{} segments {:.2?} = {:.2}s -> {}", lens.len(), lens, total, out);
+            })
+        }
         _ => {
-            eprintln!("usage: riftd grab [out.png] | record [out.mp4] [secs] [fps] | buffer [run] [seg] [keep]");
+            eprintln!("usage: riftd grab [out.png] | record [out.mp4] [secs] [fps] | buffer [run] [seg] [keep] | clip [out.mp4]");
             return ExitCode::FAILURE;
         }
     };
