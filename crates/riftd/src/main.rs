@@ -1,6 +1,23 @@
-use std::process::ExitCode;
+mod hotkey;
 
+use std::path::PathBuf;
+use std::process::ExitCode;
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+
+use rift_core::buffer;
 use rift_core::record::Opts;
+
+fn arg<T: std::str::FromStr>(args: &[String], i: usize, default: T) -> T {
+    args.get(i).and_then(|s| s.parse().ok()).unwrap_or(default)
+}
+
+fn clips_dir() -> PathBuf {
+    match std::env::var("USERPROFILE") {
+        Ok(p) => PathBuf::from(p).join("Videos").join("Rift"),
+        Err(_) => PathBuf::from("clips"),
+    }
+}
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -12,21 +29,41 @@ fn main() -> ExitCode {
         }
         Some("record") => {
             let path = args.get(1).cloned().unwrap_or("out.mp4".into());
-            let secs = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(10);
-            let fps = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(60);
-            rift_core::record::record_primary(Opts { path, secs, fps })
-        }
-        Some("buffer") => {
-            let run_secs = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(15);
-            let seg_secs = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(3);
-            let keep = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(4);
-            rift_core::buffer::run(rift_core::buffer::Opts {
-                dir: std::env::temp_dir().join("rift-buf"),
-                seg_secs,
-                keep,
-                run_secs,
-                fps: 60,
+            rift_core::record::record_primary(Opts {
+                path,
+                secs: arg(&args, 2, 10),
+                fps: arg(&args, 3, 60),
             })
+        }
+        Some("buffer") => buffer::run(
+            buffer::Opts {
+                dir: std::env::temp_dir().join("rift-buf"),
+                out_dir: clips_dir(),
+                seg_secs: arg(&args, 2, 3),
+                keep: arg(&args, 3, 4),
+                run_secs: arg(&args, 1, 15),
+                fps: 60,
+            },
+            Arc::new(AtomicBool::new(false)),
+        ),
+        Some("run") => {
+            let clip_secs: u64 = arg(&args, 1, 30);
+            let seg_secs: u64 = arg(&args, 2, 3);
+            let save = Arc::new(AtomicBool::new(false));
+            hotkey::spawn(save.clone());
+            println!("keeping the last ~{clip_secs}s, F9 saves a clip, Ctrl+C quits");
+            buffer::run(
+                buffer::Opts {
+                    dir: std::env::temp_dir().join("rift-buf"),
+                    out_dir: clips_dir(),
+                    seg_secs,
+                    // +1 because the segment cut by the hotkey is a short one
+                    keep: (clip_secs.div_ceil(seg_secs) + 1) as usize,
+                    run_secs: 0,
+                    fps: 60,
+                },
+                save,
+            )
         }
         Some("clip") => {
             let out = args.get(1).cloned().unwrap_or("clip.mp4".into());
@@ -41,7 +78,9 @@ fn main() -> ExitCode {
             })
         }
         _ => {
-            eprintln!("usage: riftd grab [out.png] | record [out.mp4] [secs] [fps] | buffer [run] [seg] [keep] | clip [out.mp4]");
+            eprintln!(
+                "usage: riftd run [clip_secs] [seg_secs]\n       riftd grab [out.png] | record [out.mp4] [secs] [fps]\n       riftd buffer [run] [seg] [keep] | clip [out.mp4]"
+            );
             return ExitCode::FAILURE;
         }
     };
